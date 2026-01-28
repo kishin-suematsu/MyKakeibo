@@ -1,11 +1,5 @@
-//
-//  MyKakeiboApp.swift
-//  MyKakeibo
-//
-//  Created by Kishin Suematsu on 1/27/26.
-//
-
 import SwiftUI
+import SwiftData
 
 @main
 struct MyKakeiboApp: App {
@@ -13,5 +7,7 @@ struct MyKakeiboApp: App {
         WindowGroup {
             ContentView()
         }
+        // ↓ この1行を追加するだけで、データベースが準備されます
+        .modelContainer(for: ExpenseItem.self)
     }
 }
