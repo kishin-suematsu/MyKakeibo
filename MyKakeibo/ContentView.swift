@@ -159,27 +159,50 @@ struct CalendarReportView: View {
     @Query private var items: [ExpenseItem]
     
     @State private var currentMonth = Date()
-    @State private var selectedDate: Date? = nil // ★追加: 選んだ日付を保存する変数
+    @State private var selectedDate: Date? = nil
+    
+    // ★追加: 年月を選ぶシートを出すためのフラグ
+    @State private var showDatePicker = false
 
     let daysOfWeek = ["日", "月", "火", "水", "木", "金", "土"]
 
     var body: some View {
         NavigationStack {
             VStack {
-                // --- 月の切り替えエリア ---
+                // --- 月の切り替えエリア (ここを改造) ---
                 HStack {
+                    // 左矢印 (先月)
                     Button(action: { changeMonth(by: -1) }) {
                         Image(systemName: "chevron.left")
+                            .padding() // タップしやすく
                     }
+                    
                     Spacer()
-                    Text(currentMonth, format: .dateTime.year().month())
-                        .font(.title2.bold())
+                    
+                    // 真ん中の年月文字 (ボタン化)
+                    Button(action: { showDatePicker = true }) {
+                        HStack {
+                            Text(currentMonth, format: .dateTime.year().month())
+                                .font(.title2.bold())
+                                .foregroundColor(.primary)
+                            
+                            // 下向き矢印をつけて「押せる感」を出す
+                            Image(systemName: "chevron.down")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                    }
+                    
                     Spacer()
+                    
+                    // 右矢印 (来月)
                     Button(action: { changeMonth(by: 1) }) {
                         Image(systemName: "chevron.right")
+                            .padding() // タップしやすく
                     }
                 }
-                .padding()
+                .padding(.horizontal)
+                .padding(.top, 10)
 
                 // --- 曜日のヘッダー ---
                 HStack {
@@ -197,7 +220,6 @@ struct CalendarReportView: View {
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7), spacing: 10) {
                     ForEach(days, id: \.self) { date in
                         if let date = date {
-                            // --- 日付マスのデザイン ---
                             VStack(spacing: 4) {
                                 Text(date, format: .dateTime.day())
                                     .font(.caption)
@@ -207,7 +229,7 @@ struct CalendarReportView: View {
                                 if total > 0 {
                                     Text("\(Int(total))")
                                         .font(.caption2)
-                                        .foregroundColor(textColor(for: date)) // 文字色も合わせる
+                                        .foregroundColor(textColor(for: date))
                                         .lineLimit(1)
                                         .minimumScaleFactor(0.5)
                                 } else {
@@ -216,10 +238,9 @@ struct CalendarReportView: View {
                             }
                             .frame(height: 50)
                             .frame(maxWidth: .infinity)
-                            .background(backgroundColor(for: date)) // ★背景色を変える
+                            .background(backgroundColor(for: date))
                             .cornerRadius(8)
                             .onTapGesture {
-                                // ★タップしたらその日を選択
                                 selectedDate = date
                             }
                         } else {
@@ -231,27 +252,20 @@ struct CalendarReportView: View {
               
                 // --- 下部のリスト表示 ---
                 List {
-                    // ★日付が選択されていたら、その日の詳細を表示
                     if let selected = selectedDate {
                         Section(header: HStack {
                             Text(selected, format: .dateTime.month().day().weekday())
                             Spacer()
-                            // 選択解除ボタン (×)
-                            Button {
-                                selectedDate = nil
-                            } label: {
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundStyle(.gray)
+                            Button { selectedDate = nil } label: {
+                                Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
                             }
                         }) {
-                            // その日のデータだけを抽出
                             let itemsForDay = items.filter { Calendar.current.isDate($0.date, inSameDayAs: selected) }
                             
                             if itemsForDay.isEmpty {
                                 Text("履歴はありません")
                             } else {
                                 ForEach(itemsForDay) { item in
-                                    // ★ここで編集画面へ移動
                                     NavigationLink(destination: EditExpenseView(item: item)) {
                                         HStack {
                                             Text(item.name.isEmpty ? "No Name" : item.name)
@@ -268,7 +282,6 @@ struct CalendarReportView: View {
                             }
                         }
                     } else {
-                        // ★日付が選ばれていない時は、今月の合計を表示
                         Section {
                             HStack {
                                 Text("今月の出費合計")
@@ -281,36 +294,59 @@ struct CalendarReportView: View {
                 }
             }
             .navigationTitle("月間レポート")
+            .navigationBarTitleDisplayMode(.inline) // タイトルバーをスッキリさせる
+            // ★追加: 年月選択用のシート設定
+            .sheet(isPresented: $showDatePicker) {
+                VStack {
+                    Text("年月を選択")
+                        .font(.headline)
+                        .padding(.top)
+                    
+                    // 日付ピッカー (ホイール形式)
+                    DatePicker(
+                        "",
+                        selection: $currentMonth,
+                        displayedComponents: [.date]
+                    )
+                    .datePickerStyle(.wheel)
+                    .labelsHidden()
+                    
+                    // 完了ボタン
+                    Button("完了") {
+                        selectedDate = nil // 月を変えたら選択解除
+                        showDatePicker = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .padding()
+                }
+                .presentationDetents([.medium]) // 画面の半分くらいの高さで出す
+            }
         }
     }
 
-    // --- 色とデザインのロジック ---
+    // --- 色とデザインのロジック (変更なし) ---
     private func backgroundColor(for date: Date) -> Color {
-        // 選択中の日付ならオレンジ
         if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) {
             return Color.orange
         }
-        // 今日なら青
         if Calendar.current.isDateInToday(date) {
             return Color.blue.opacity(0.3)
         }
-        // それ以外は薄いグレー
         return Color(uiColor: .secondarySystemBackground).opacity(0.5)
     }
     
     private func textColor(for date: Date) -> Color {
-        // 選択中の日付なら白文字が見やすい
         if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) {
             return .white
         }
         return .primary
     }
 
-    // --- カレンダー計算ロジック ---
+    // --- カレンダー計算ロジック (変更なし) ---
     private func changeMonth(by value: Int) {
         if let newDate = Calendar.current.date(byAdding: .month, value: value, to: currentMonth) {
             currentMonth = newDate
-            selectedDate = nil // 月を変えたら選択解除
+            selectedDate = nil
         }
     }
 
@@ -341,7 +377,6 @@ struct CalendarReportView: View {
         .reduce(0) { $0 + $1.amount }
     }
 }
-
 // ==========================================
 //  3. 編集画面 (変更なし)
 // ==========================================
