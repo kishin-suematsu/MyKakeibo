@@ -91,7 +91,7 @@ struct ExpenseInputListView: View {
                             HStack {
                                 Text(item.name.isEmpty ? "No Name" : item.name)
                                 Spacer()
-                                Text(item.amount, format: .currency(code: "USD"))
+                                Text(item.amount, format: .currency(code: "JPY"))
                             }
                         }
                     }
@@ -112,7 +112,7 @@ struct ExpenseInputListView: View {
                     Text(date, format: .dateTime.year().month())
                         .font(.headline)
                     Spacer()
-                    Text(totalAmount, format: .currency(code: "USD"))
+                    Text(totalAmount, format: .currency(code: "JPY"))
                         .bold()
                         .foregroundColor(.blue)
                 }
@@ -160,57 +160,79 @@ struct CalendarReportView: View {
     
     @State private var currentMonth = Date()
     @State private var selectedDate: Date? = nil
-    
-    // ★追加: 年月を選ぶシートを出すためのフラグ
     @State private var showDatePicker = false
+    @State private var showAddSheet = false
+    
+    // ★変更1: 予算変数を @State に変更 (月ごとに読み込むため)
+    @State private var monthlyBudget: Double = 1000.0
+    @State private var showBudgetEdit = false
 
     let daysOfWeek = ["日", "月", "火", "水", "木", "金", "土"]
 
     var body: some View {
         NavigationStack {
             VStack {
-                // --- 月の切り替えエリア (ここを改造) ---
+                // --- 月の切り替えエリア ---
                 HStack {
-                    // 左矢印 (先月)
                     Button(action: { changeMonth(by: -1) }) {
-                        Image(systemName: "chevron.left")
-                            .padding() // タップしやすく
+                        Image(systemName: "chevron.left").padding()
                     }
-                    
                     Spacer()
-                    
-                    // 真ん中の年月文字 (ボタン化)
                     Button(action: { showDatePicker = true }) {
                         HStack {
                             Text(currentMonth, format: .dateTime.year().month())
-                                .font(.title2.bold())
-                                .foregroundColor(.primary)
-                            
-                            // 下向き矢印をつけて「押せる感」を出す
-                            Image(systemName: "chevron.down")
-                                .font(.caption)
-                                .foregroundColor(.gray)
+                                .font(.title2.bold()).foregroundColor(.primary)
+                            Image(systemName: "chevron.down").font(.caption).foregroundColor(.gray)
                         }
                     }
-                    
                     Spacer()
-                    
-                    // 右矢印 (来月)
                     Button(action: { changeMonth(by: 1) }) {
-                        Image(systemName: "chevron.right")
-                            .padding() // タップしやすく
+                        Image(systemName: "chevron.right").padding()
                     }
                 }
-                .padding(.horizontal)
-                .padding(.top, 10)
+                .padding(.horizontal).padding(.top, 10)
+                
+                // --- 予算と残高の表示エリア (デザインはそのまま) ---
+                VStack(spacing: 8) {
+                    let total = totalForMonth()
+                    let remaining = monthlyBudget - total
+                    let progress = min(total / monthlyBudget, 1.0)
+                    
+                    HStack {
+                        VStack(alignment: .leading) {
+                            Text("今月の予算: \(monthlyBudget, format: .currency(code: "JPY"))")
+                                .font(.caption).foregroundStyle(.gray)
+                            
+                            if remaining >= 0 {
+                                Text("残り: \(remaining, format: .currency(code: "JPY"))")
+                                    .font(.headline).bold().foregroundStyle(.blue)
+                            } else {
+                                Text("超過: \(abs(remaining), format: .currency(code: "JPY"))")
+                                    .font(.headline).bold().foregroundStyle(.red)
+                            }
+                        }
+                        Spacer()
+                        Button("予算設定") { showBudgetEdit = true }
+                            .font(.caption).buttonStyle(.bordered)
+                    }
+                    
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 5)
+                                .frame(height: 10).foregroundStyle(Color.gray.opacity(0.2))
+                            RoundedRectangle(cornerRadius: 5)
+                                .frame(width: geometry.size.width * progress, height: 10)
+                                .foregroundStyle(remaining >= 0 ? Color.blue : Color.red)
+                        }
+                    }
+                    .frame(height: 10)
+                }
+                .padding(.horizontal).padding(.bottom, 10)
 
                 // --- 曜日のヘッダー ---
                 HStack {
                     ForEach(daysOfWeek, id: \.self) { day in
-                        Text(day)
-                            .font(.caption)
-                            .fontWeight(.bold)
-                            .frame(maxWidth: .infinity)
+                        Text(day).font(.caption).fontWeight(.bold).frame(maxWidth: .infinity)
                             .foregroundColor(day == "日" ? .red : (day == "土" ? .blue : .primary))
                     }
                 }
@@ -222,27 +244,18 @@ struct CalendarReportView: View {
                         if let date = date {
                             VStack(spacing: 4) {
                                 Text(date, format: .dateTime.day())
-                                    .font(.caption)
-                                    .foregroundColor(textColor(for: date))
-                                
+                                    .font(.caption).foregroundColor(textColor(for: date))
                                 let total = totalFor(date)
                                 if total > 0 {
-                                    Text("\(Int(total))")
-                                        .font(.caption2)
-                                        .foregroundColor(textColor(for: date))
-                                        .lineLimit(1)
-                                        .minimumScaleFactor(0.5)
+                                    Text("\(Int(total))").font(.caption2).foregroundColor(textColor(for: date))
+                                        .lineLimit(1).minimumScaleFactor(0.5)
                                 } else {
                                     Text("-").font(.caption2).foregroundColor(.clear)
                                 }
                             }
-                            .frame(height: 50)
-                            .frame(maxWidth: .infinity)
-                            .background(backgroundColor(for: date))
-                            .cornerRadius(8)
-                            .onTapGesture {
-                                selectedDate = date
-                            }
+                            .frame(height: 50).frame(maxWidth: .infinity)
+                            .background(backgroundColor(for: date)).cornerRadius(8)
+                            .onTapGesture { selectedDate = date }
                         } else {
                             Color.clear.frame(height: 50)
                         }
@@ -256,12 +269,14 @@ struct CalendarReportView: View {
                         Section(header: HStack {
                             Text(selected, format: .dateTime.month().day().weekday())
                             Spacer()
+                            Button { showAddSheet = true } label: {
+                                Label("追加", systemImage: "plus.circle.fill").font(.body)
+                            }.padding(.trailing, 10)
                             Button { selectedDate = nil } label: {
                                 Image(systemName: "xmark.circle.fill").foregroundStyle(.gray)
                             }
                         }) {
                             let itemsForDay = items.filter { Calendar.current.isDate($0.date, inSameDayAs: selected) }
-                            
                             if itemsForDay.isEmpty {
                                 Text("履歴はありません")
                             } else {
@@ -270,14 +285,12 @@ struct CalendarReportView: View {
                                         HStack {
                                             Text(item.name.isEmpty ? "No Name" : item.name)
                                             Spacer()
-                                            Text(item.amount, format: .currency(code: "USD"))
+                                            Text(item.amount, format: .currency(code: "JPY"))
                                         }
                                     }
                                 }
                                 .onDelete { indexSet in
-                                    for index in indexSet {
-                                        modelContext.delete(itemsForDay[index])
-                                    }
+                                    for index in indexSet { modelContext.delete(itemsForDay[index]) }
                                 }
                             }
                         }
@@ -286,70 +299,94 @@ struct CalendarReportView: View {
                             HStack {
                                 Text("今月の出費合計")
                                 Spacer()
-                                Text(totalForMonth(), format: .currency(code: "USD"))
-                                    .bold()
+                                Text(totalForMonth(), format: .currency(code: "JPY")).bold()
                             }
                         }
                     }
                 }
             }
             .navigationTitle("月間レポート")
-            .navigationBarTitleDisplayMode(.inline) // タイトルバーをスッキリさせる
-            // ★追加: 年月選択用のシート設定
+            .navigationBarTitleDisplayMode(.inline)
+            
+            // --- シートとアラート ---
             .sheet(isPresented: $showDatePicker) {
                 VStack {
-                    Text("年月を選択")
-                        .font(.headline)
-                        .padding(.top)
-                    
-                    // 日付ピッカー (ホイール形式)
-                    DatePicker(
-                        "",
-                        selection: $currentMonth,
-                        displayedComponents: [.date]
-                    )
-                    .datePickerStyle(.wheel)
-                    .labelsHidden()
-                    
-                    // 完了ボタン
-                    Button("完了") {
-                        selectedDate = nil // 月を変えたら選択解除
-                        showDatePicker = false
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .padding()
+                    Text("年月を選択").font(.headline).padding(.top)
+                    DatePicker("", selection: $currentMonth, displayedComponents: [.date])
+                        .datePickerStyle(.wheel).labelsHidden()
+                    Button("完了") { selectedDate = nil; showDatePicker = false }
+                        .buttonStyle(.borderedProminent).padding()
                 }
-                .presentationDetents([.medium]) // 画面の半分くらいの高さで出す
+                .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showAddSheet) {
+                if let selected = selectedDate {
+                    SimpleInputView(date: selected).presentationDetents([.medium])
+                }
+            }
+            // ★変更2: 予算保存処理
+            .alert("予算を設定", isPresented: $showBudgetEdit) {
+                TextField("金額", value: $monthlyBudget, format: .number)
+                    .keyboardType(.decimalPad)
+                Button("OK") {
+                    saveBudgetForCurrentMonth() // 保存を実行
+                }
+                Button("キャンセル", role: .cancel) {
+                    loadBudgetForCurrentMonth() // キャンセルしたら元の値に戻す
+                }
+            } message: {
+                Text("\(currentMonth, format: .dateTime.month())月の目標金額を入力してください")
             }
         }
-    }
-
-    // --- 色とデザインのロジック (変更なし) ---
-    private func backgroundColor(for date: Date) -> Color {
-        if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) {
-            return Color.orange
+        // ★変更3: 画面が表示されたり、月が変わったりした時に予算を読み込む
+        .onAppear {
+            loadBudgetForCurrentMonth()
         }
-        if Calendar.current.isDateInToday(date) {
-            return Color.blue.opacity(0.3)
+        .onChange(of: currentMonth) {
+            loadBudgetForCurrentMonth()
         }
-        return Color(uiColor: .secondarySystemBackground).opacity(0.5)
     }
     
-    private func textColor(for date: Date) -> Color {
-        if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) {
-            return .white
+    // --- ★追加: 月ごとの予算管理ロジック ---
+    
+    // その月の「保存用キー」を作る関数 (例: "budget_2026_02")
+    private func budgetKey(for date: Date) -> String {
+        let components = Calendar.current.dateComponents([.year, .month], from: date)
+        return "budget_\(components.year!)_\(components.month!)"
+    }
+    
+    // 予算を保存する
+    private func saveBudgetForCurrentMonth() {
+        let key = budgetKey(for: currentMonth)
+        UserDefaults.standard.set(monthlyBudget, forKey: key)
+    }
+    
+    // 予算を読み込む (データがなければデフォルト1000)
+    private func loadBudgetForCurrentMonth() {
+        let key = budgetKey(for: currentMonth)
+        let savedValue = UserDefaults.standard.double(forKey: key)
+        if savedValue > 0 {
+            monthlyBudget = savedValue
+        } else {
+            monthlyBudget = 1000.0 // デフォルト値
         }
+    }
+
+    // --- 以下、既存のロジック (変更なし) ---
+    private func backgroundColor(for date: Date) -> Color {
+        if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) { return Color.orange }
+        if Calendar.current.isDateInToday(date) { return Color.blue.opacity(0.3) }
+        return Color(uiColor: .secondarySystemBackground).opacity(0.5)
+    }
+    private func textColor(for date: Date) -> Color {
+        if let selected = selectedDate, Calendar.current.isDate(date, inSameDayAs: selected) { return .white }
         return .primary
     }
-
-    // --- カレンダー計算ロジック (変更なし) ---
     private func changeMonth(by value: Int) {
         if let newDate = Calendar.current.date(byAdding: .month, value: value, to: currentMonth) {
-            currentMonth = newDate
-            selectedDate = nil
+            currentMonth = newDate; selectedDate = nil
         }
     }
-
     private func daysInMonth() -> [Date?] {
         guard let monthInterval = Calendar.current.dateInterval(of: .month, for: currentMonth) else { return [] }
         let monthStart = monthInterval.start
@@ -358,23 +395,15 @@ struct CalendarReportView: View {
         var days: [Date?] = []
         for _ in 1..<startWeekday { days.append(nil) }
         for day in range {
-            if let date = Calendar.current.date(byAdding: .day, value: day - 1, to: monthStart) {
-                days.append(date)
-            }
+            if let date = Calendar.current.date(byAdding: .day, value: day - 1, to: monthStart) { days.append(date) }
         }
         return days
     }
-
     private func totalFor(_ date: Date) -> Double {
-        items.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }
-            .reduce(0) { $0 + $1.amount }
+        items.filter { Calendar.current.isDate($0.date, inSameDayAs: date) }.reduce(0) { $0 + $1.amount }
     }
-    
     private func totalForMonth() -> Double {
-        items.filter {
-            Calendar.current.isDate($0.date, equalTo: currentMonth, toGranularity: .month)
-        }
-        .reduce(0) { $0 + $1.amount }
+        items.filter { Calendar.current.isDate($0.date, equalTo: currentMonth, toGranularity: .month) }.reduce(0) { $0 + $1.amount }
     }
 }
 // ==========================================
@@ -395,4 +424,46 @@ struct EditExpenseView: View {
         .navigationTitle("詳細・編集")
         .navigationBarTitleDisplayMode(.inline)
     }
+}
+
+// 日付を指定してサッと入力するための簡易画面
+struct SimpleInputView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.dismiss) private var dismiss
+    
+    var date: Date // カレンダーから受け取った日付
+    
+    @State private var name = ""
+    @State private var amount = ""
+    
+    var body: some View {
+        NavigationStack {
+            Form {
+                TextField("使ったもの", text: $name)
+                TextField("金額", text: $amount)
+                    .keyboardType(.decimalPad)
+            }
+            .navigationTitle("追加: \(date, format: .dateTime.month().day())")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("キャンセル") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("保存") {
+                        if let amountVal = Double(amount) {
+                            let newItem = ExpenseItem(name: name, amount: amountVal, date: date)
+                            modelContext.insert(newItem)
+                            dismiss()
+                        }
+                    }
+                    .disabled(amount.isEmpty)
+                }
+            }
+        }
+    }
+}
+
+#Preview {
+    ContentView()
 }
